@@ -10,6 +10,11 @@ from dotenv import load_dotenv
 # Vercel has no .env file, so this does nothing there.
 load_dotenv(Path(__file__).resolve().parent.parent / ".env", override=False)
 
+# Groq retires models over time (llama-3.3-70b-versatile was shut down on 2026-08-16 and then
+# returned 404 model_not_found). Default to Groq's recommended replacement; override with GROQ_MODEL
+# (see https://console.groq.com/docs/models) without changing code.
+DEFAULT_MODEL = "openai/gpt-oss-120b"
+
 log = logging.getLogger("carefund")
 
 
@@ -23,7 +28,7 @@ def get_llm(temperature: float = 0.2):
     from langchain_groq import ChatGroq
 
     return ChatGroq(
-        model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
+        model=os.getenv("GROQ_MODEL") or DEFAULT_MODEL,
         temperature=temperature,
         timeout=30,
         max_retries=1,
@@ -36,4 +41,4 @@ def llm_failed(node: str, err: Exception) -> None:
 
 
 def model_name() -> str:
-    return os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile") if llm_available() else "built-in rules"
+    return (os.getenv("GROQ_MODEL") or DEFAULT_MODEL) if llm_available() else "built-in rules"
