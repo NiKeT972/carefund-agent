@@ -33,8 +33,7 @@ def dump(title, value):
 
 
 def resume(r, decision, **extra):
-    return c.post("/api/campaign/resume", json={"state": r["state"], "paused_at": r["paused_at"],
-                                                "decision": decision, **extra}).json()
+    return c.post("/api/campaign/resume", json={"token": r["token"], "decision": decision, **extra}).json()
 
 
 def show_story(state):

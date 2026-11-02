@@ -112,7 +112,7 @@ function loadSample(k){const s=META.samples[k];F.forEach(f=>$(f).value=s.form[f]
 function collect(){const form={};F.forEach(f=>form[f]=$(f).value);return{form,documents:[...document.querySelectorAll("#docs input:checked")].map(c=>c.value),estimate_text:$("estimate_text").value}}
 function busy(b,btn){document.querySelectorAll("button").forEach(x=>x.disabled=b);if(btn){btn.dataset.t=btn.dataset.t||btn.innerHTML;btn.innerHTML=b?'<span class="spinner"></span>Running…':btn.dataset.t}}
 async function run(){busy(true,$("runBtn"));CHAT=[];try{CUR=await api("/api/campaign/start",collect());render()}catch(e){alert(e.message)}busy(false,$("runBtn"))}
-async function resume(decision,el){const b={state:CUR.state,paused_at:CUR.paused_at,decision};if(CUR.paused_at==="fraud_review")b.note=$("note").value;else b.feedback=$("fb").value;
+async function resume(decision,el){const b={token:CUR.token,decision};if(CUR.paused_at==="fraud_review")b.note=$("note").value;else b.feedback=$("fb").value;
   if(CUR.paused_at==="organiser_approval"&&decision!=="approve"&&!b.feedback){alert("Tell the agent what to change.");return}
   busy(true,el);try{CUR=await api("/api/campaign/resume",b);render()}catch(e){alert(e.message)}busy(false,el)}
 function render(){
