@@ -43,15 +43,34 @@ class ResumeReq(BaseModel):
 
 class AskReq(BaseModel):
     question: str = Field(max_length=500)
-    knowledge_base: list[str] = Field(max_length=200)
+    campaign_token: str          # signed published campaign; the facts come from it, not from the browser
+
+
+class ViewReq(BaseModel):
+    token: str
 
 
 def _respond(result: dict) -> dict:
     """Add a signed token when the graph is paused; the browser sends only that token back to resume.
-    The token also carries paused_at, so the client can't choose which checkpoint to resume from."""
+    The token also carries paused_at, so the client can't choose which checkpoint to resume from.
+    A published campaign gets its own signed token: it's the shareable public page (/c#<token>) and the
+    source of facts for donor Q&A, so neither can be edited by whoever holds the link."""
+    st = result["state"]
     if result["paused_at"]:
-        result["token"] = seal({"state": result["state"], "paused_at": result["paused_at"]})
+        result["token"] = seal({"state": st, "paused_at": result["paused_at"]})
+    elif st.get("campaign") and st.get("status") in ("live", "awaiting_documents"):
+        result["campaign_token"] = seal({"campaign": st["campaign"], "status": st["status"]})
     return result
+
+
+def _campaign_from(token: str) -> dict:
+    try:
+        payload = unseal(token)
+    except InvalidToken:
+        raise HTTPException(400, "This campaign link is invalid or was modified.")
+    if "campaign" not in payload:            # e.g. a paused-run token pasted into a campaign link
+        raise HTTPException(400, "This campaign link is invalid or was modified.")
+    return payload
 
 
 @app.get("/api/health")
@@ -75,6 +94,8 @@ def resume(req: ResumeReq):
         paused = unseal(req.token)
     except InvalidToken as e:
         raise HTTPException(400, str(e))
+    if "paused_at" not in paused:            # e.g. a campaign token sent to resume
+        raise HTTPException(400, "This paused run is no longer valid. Please run the agent again.")
     at = paused["paused_at"]
     if req.decision not in DECISIONS.get(at, set()):
         raise HTTPException(422, f"At {at}, decision must be one of {sorted(DECISIONS.get(at, []))}")
@@ -86,7 +107,22 @@ def resume(req: ResumeReq):
 
 @app.post("/api/donor/ask")
 def ask(req: AskReq):
-    return donor.answer(req.question, req.knowledge_base)
+    return donor.answer(req.question, _campaign_from(req.campaign_token)["campaign"]["knowledge_base"])
+
+
+@app.post("/api/campaign/view")
+def view(req: ViewReq):
+    """Public campaign page data. The signature proves CareFund's agent produced and verified this campaign."""
+    p = _campaign_from(req.token)
+    c = {k: v for k, v in p["campaign"].items() if k != "knowledge_base"}
+    return {"campaign": c, "status": p["status"], "facts": len(p["campaign"]["knowledge_base"])}
+
+
+@app.get("/c")
+def campaign_page():
+    """Shareable campaign page. The signed campaign travels in the URL fragment (/c#<token>), which browsers never
+    send to the server in the request line, so it doesn't end up in access logs."""
+    return FileResponse(ROOT / "public" / "campaign.html")
 
 
 @app.get("/")

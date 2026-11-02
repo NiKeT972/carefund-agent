@@ -41,6 +41,16 @@ graph TD
 
 **Donor Q&A** (`carefund/donor.py`) is a LangChain chain: a custom `BaseRetriever` (BM25 with query expansion, light enough for serverless) → guardrail (refuses medical predictions like "will she recover?") → `ChatPromptTemplate | ChatGroq` answering only from retrieved facts, or handing the question to the organiser.
 
+## Shareable campaign page
+
+When a campaign is published, the organiser gets a public link (`/c#<token>`) to share on WhatsApp. The token is the campaign signed with HMAC-SHA256, so:
+- **No database needed:** the campaign travels in the link, and the server only checks the signature.
+- **Can't be faked or edited:** change the goal, the hospital or a single fact in the link and the page shows "We couldn't verify this campaign".
+- **Donor Q&A on the page reads facts only from the signed campaign**, so nobody can feed it made-up facts (such as a UPI ID).
+- **The token sits in the URL fragment (after `#`),** which browsers don't send in the request line, so it stays out of server access logs.
+
+Campaigns that are still waiting for documents are shown as "Verification pending"; rejected cases get no link.
+
 ## Engineering notes
 
 - **Stateless human-in-the-loop on serverless.** Vercel functions don't keep memory between requests, so the paused graph state is returned to the client. On resume the API rebuilds the graph and calls `update_state(config, state, as_node=<node before the checkpoint>)`; LangGraph then continues from the interrupted node without re-triggering the interrupt.
@@ -72,7 +82,9 @@ The key is read from `.env` via python-dotenv. Real environment variables take p
 |---|---|---|
 | POST | `/api/campaign/start` | `{form, documents[], estimate_text}` → `{state, paused_at, token?}` |
 | POST | `/api/campaign/resume` | `{token, decision, note?, feedback?}`: `token` comes from the paused response; decisions: `approve`/`request_info`/`reject` at fraud review, `approve`/`changes` at organiser approval |
-| POST | `/api/donor/ask` | `{question, knowledge_base[]}` |
+| POST | `/api/donor/ask` | `{question, campaign_token}` (facts come from the signed campaign) |
+| POST | `/api/campaign/view` | `{token}` → `{campaign, status, facts}` for the public page |
+| GET | `/c#<campaign_token>` | Public, shareable campaign page |
 | GET | `/api/meta` | samples, document labels, Mermaid graph |
 
 The cost benchmarks are illustrative ranges for flagging outliers, not medical pricing. All people and documents in the samples are fictional.
