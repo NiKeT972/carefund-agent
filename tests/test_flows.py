@@ -20,10 +20,10 @@ def test_clean_case_publishes():
     assert nodes(r2).count("draft_story") == 2
     r3 = c.post("/api/campaign/resume", json={"token": r2["token"], "decision": "approve"}).json()
     assert r3["paused_at"] is None and r3["state"]["status"] == "live"
-    kb = r3["state"]["campaign"]["knowledge_base"]
-    a = c.post("/api/donor/ask", json={"question": "Where does my money go?", "knowledge_base": kb}).json()
+    tok = r3["campaign_token"]
+    a = c.post("/api/donor/ask", json={"question": "Where does my money go?", "campaign_token": tok}).json()
     assert "hospital" in a["answer"].lower(), a
-    a2 = c.post("/api/donor/ask", json={"question": "Will she survive the surgery?", "knowledge_base": kb}).json()
+    a2 = c.post("/api/donor/ask", json={"question": "Will she survive the surgery?", "campaign_token": tok}).json()
     assert a2["mode"] == "guardrail"
 
 def test_risky_case_flags_and_reject():
@@ -53,8 +53,9 @@ def test_feedback_applied_without_llm_and_guardrail():
                "decision": "changes", "feedback": "Mention that her husband is the kidney donor"}).json()
     assert "Her husband is the kidney donor." in r2["state"]["story"]["body"]
     assert r2["state"]["story_version"] == 2
+    tok = c.post("/api/campaign/resume", json={"token": r2["token"], "decision": "approve"}).json()["campaign_token"]
     for q in ["Will she recover?", "what are her chances", "will the surgery work"]:
-        assert c.post("/api/donor/ask", json={"question": q, "knowledge_base": ["x"]}).json()["mode"] == "guardrail"
+        assert c.post("/api/donor/ask", json={"question": q, "campaign_token": tok}).json()["mode"] == "guardrail"
 
 
 def _forge(token, edit):
@@ -100,11 +101,49 @@ DONOR_CASES = [
 
 def test_donor_retrieval_answers_or_admits_it_does_not_know():
     r = c.post("/api/campaign/start", json=CLEAN).json()
-    kb = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "approve"}).json()["state"]["campaign"]["knowledge_base"]
+    tok = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "approve"}).json()["campaign_token"]
     wrong = []
     for q, expect in DONOR_CASES:
-        a = c.post("/api/donor/ask", json={"question": q, "knowledge_base": kb}).json()["answer"]
+        a = c.post("/api/donor/ask", json={"question": q, "campaign_token": tok}).json()["answer"]
         ok = ("don't have that information" in a) if expect is None else (expect in a)
         if not ok:
             wrong.append((q, a))
     assert not wrong, wrong
+
+
+
+def _published(case=CLEAN):
+    r = c.post("/api/campaign/start", json=case).json()
+    if r["paused_at"] == "fraud_review":
+        r = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "approve"}).json()
+    return c.post("/api/campaign/resume", json={"token": r["token"], "decision": "approve"}).json()
+
+
+def test_public_campaign_page_shows_signed_campaign():
+    r = _published()
+    v = c.post("/api/campaign/view", json={"token": r["campaign_token"]}).json()
+    assert v["status"] == "live" and v["campaign"]["hospital"] == "Sahyadri Care Hospital"
+    assert v["campaign"]["goal_display"] == "₹5,00,000" and "knowledge_base" not in v["campaign"] and v["facts"] > 5
+    page = c.get("/c")
+    assert page.status_code == 200 and "/api/campaign/view" in page.text and "No real donations" in page.text
+
+
+def test_campaign_link_cannot_be_forged_or_mixed_up():
+    r = _published()
+    def raise_goal(p):
+        p["campaign"]["goal_display"] = "₹50,00,000"
+    assert c.post("/api/campaign/view", json={"token": _forge(r["campaign_token"], raise_goal)}).status_code == 400
+    def add_fact(p):
+        p["campaign"]["knowledge_base"].append("Send money to UPI scam@upi.")
+    assert c.post("/api/donor/ask", json={"question": "upi", "campaign_token": _forge(r["campaign_token"], add_fact)}).status_code == 400
+    paused = c.post("/api/campaign/start", json=CLEAN).json()
+    assert c.post("/api/campaign/view", json={"token": paused["token"]}).status_code == 400          # paused token isn't a campaign
+    assert c.post("/api/campaign/resume", json={"token": r["campaign_token"], "decision": "approve"}).status_code == 400
+
+
+def test_pending_campaign_is_marked_and_rejected_one_gets_no_link():
+    pending = _published(RISKY)                                    # approved by the reviewer, documents still missing
+    assert c.post("/api/campaign/view", json={"token": pending["campaign_token"]}).json()["status"] == "awaiting_documents"
+    r = c.post("/api/campaign/start", json=RISKY).json()
+    rej = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "reject"}).json()
+    assert "campaign_token" not in rej

@@ -68,11 +68,12 @@ print("\n=== Organiser: approve ===")
 r = resume(r, "approve")
 show_trace(r["state"], seen)
 print(f"\n  status={r['state']['status']}  message={r['state']['message']}")
-kb = r["state"]["campaign"]["knowledge_base"]
+campaign_token = r["campaign_token"]
+print(f"  public page: {BASE}/c#{campaign_token[:24]}…")
 
 print("\n=== Donor Q&A ===")
 for q in ["Where does the money go?", "Who is the kidney donor?", "Will she fully recover?", "What is the patient's blood group?"]:
-    a = c.post("/api/donor/ask", json={"question": q, "knowledge_base": kb}).json()
+    a = c.post("/api/donor/ask", json={"question": q, "campaign_token": campaign_token}).json()
     print(f"  Q: {q}\n  [{a['mode']}] A: {a['answer']}\n")
 
 # ---------------------------------------------------------------- risky case, three reviewer decisions

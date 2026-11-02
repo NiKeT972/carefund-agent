@@ -62,6 +62,7 @@ details summary{cursor:pointer;color:var(--mute);font-size:13px}
 .mermaid{background:#fff;padding:10px;border-radius:10px;overflow:auto}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes s{to{transform:rotate(360deg)}}
 footer{color:var(--mute);font-size:12px;text-align:center;padding:10px 0 30px}
+.sharebox{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:12px;background:#fcfcfa}.sharebox .inline{margin:8px 0 6px}.sharebox small{color:var(--mute)}.sharebox a.btn{text-decoration:none}
 </style>
 </head>
 <body>
@@ -133,16 +134,18 @@ function render(){
      <label>Ask for changes</label><input id="fb" placeholder="e.g. Mention that my father is the kidney donor">
      <div class="btns"><button class="btn human" onclick="resume('approve',this)">Approve & publish</button><button class="btn ghost" onclick="resume('changes',this)">Rewrite with my changes</button></div></div>`}
   // final
-  if(!p&&s.status){h+=`<div class="card"><h2>Outcome</h2><div class="status ${s.status}">${esc(s.message)}</div></div>`;
+  if(!p&&s.status){h+=`<div class="card"><h2>Outcome</h2><div class="status ${s.status}">${esc(s.message)}</div>${CUR.campaign_token?`
+     <div class="sharebox"><b>Public campaign page</b> <span class="tag rules">signed link</span><div class="inline"><input id="shareUrl" readonly value="${location.origin}/c#${CUR.campaign_token}" onclick="this.select()"><button class="btn" onclick="copyShare(this)">Copy</button><a class="btn ghost" target="_blank" rel="noopener" href="/c#${CUR.campaign_token}">Open ↗</a></div><small>Anyone with this link sees the campaign. It's signed by the server, so the goal, story and hospital can't be edited in the link.</small></div>`:""}</div>`;
    if(s.campaign){const c=s.campaign;h+=`<div class="card" style="padding:0"><div class="camp"><div class="camphead"><span class="pill">${esc(c.category)}</span> <span class="pill">${s.status==="live"?"✓ Verified":"Verification pending"}</span><h1>${esc(c.title)}</h1><div>Goal ${c.goal_display} · ${esc(c.hospital)}</div><div class="prog"><div></div></div></div>
      <div style="padding:18px 20px" class="storybody">${esc(c.body)}</div>
      <div class="chat"><h2>Ask about this campaign <span class="tag rules">RAG over ${c.knowledge_base.length} facts</span></h2><div class="chips">${["Where does my money go?","How much is still needed?","Is this campaign genuine?","Who is the doctor?","Will she recover?"].map(q=>`<span class="chip" onclick="ask('${q}')">${q}</span>`).join("")}</div>
      <div class="msgs" id="msgs">${CHAT.map(chatHtml).join("")}</div><div class="inline"><input id="q" placeholder="Ask a donor question…" onkeydown="if(event.key==='Enter')ask()"><button class="btn" onclick="ask()">Ask</button></div></div></div></div>`}}
   $("out").innerHTML=h;$("out").scrollIntoView({behavior:"smooth",block:"start"});
 }
+async function copyShare(btn){try{await navigator.clipboard.writeText($("shareUrl").value);btn.textContent="Copied ✓"}catch{$("shareUrl").select()}setTimeout(()=>btn.textContent="Copy",1500)}
 function chatHtml(m){return m.q?`<div class="m q">${esc(m.q)}</div>`:`<div class="m a">${esc(m.answer)}<small>${m.mode}${m.sources?.length?` · ${m.sources.length} source(s)`:""}</small></div>`}
 async function ask(q){q=q||$("q").value.trim();if(!q)return;CHAT.push({q});$("msgs").innerHTML=CHAT.map(chatHtml).join("");$("q").value="";
-  const a=await api("/api/donor/ask",{question:q,knowledge_base:CUR.state.campaign.knowledge_base});CHAT.push(a);const m=$("msgs");m.innerHTML=CHAT.map(chatHtml).join("");m.scrollTop=m.scrollHeight}
+  const a=await api("/api/donor/ask",{question:q,campaign_token:CUR.campaign_token});CHAT.push(a);const m=$("msgs");m.innerHTML=CHAT.map(chatHtml).join("");m.scrollTop=m.scrollHeight}
 init();
 </script>
 </body>
