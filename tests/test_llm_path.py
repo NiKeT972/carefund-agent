@@ -79,3 +79,13 @@ def test_llm_errors_are_logged_and_donor_falls_back(monkeypatch, caplog):
     assert a["mode"] == "retrieval" and a["answer"]
     for node in ("extract_case", "draft_story", "donor_answer"):
         assert f"{node} failed" in caplog.text
+
+
+def test_model_setting(monkeypatch):
+    import carefund.llm as L
+    monkeypatch.setenv("GROQ_MODEL", "some/model")
+    assert L.model_name() == "built-in rules"            # no key -> rules, even if a model is configured
+    monkeypatch.setenv("GROQ_API_KEY", "k")
+    assert L.model_name() == "some/model"
+    monkeypatch.delenv("GROQ_MODEL")
+    assert L.model_name() == L.DEFAULT_MODEL != "llama-3.3-70b-versatile"   # retired by Groq (404)

@@ -51,7 +51,7 @@ graph TD
 
 ## Stack
 
-LangGraph 1.x · LangChain Core · langchain-groq (Llama 3.3 70B) · Pydantic · rank-bm25 · FastAPI · vanilla JS UI · Vercel
+LangGraph 1.x · LangChain Core · langchain-groq (gpt-oss-120b by default, set with `GROQ_MODEL`) · Pydantic · rank-bm25 · FastAPI · vanilla JS UI · Vercel
 
 ## Run locally
 
