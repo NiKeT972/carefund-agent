@@ -22,7 +22,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from . import knowledge as K
-from .llm import get_llm
+from .llm import get_llm, llm_failed
 
 
 # --------------------------------------------------------------------------- state
@@ -143,6 +143,7 @@ def extract_case(state: CampaignState) -> dict:
             return {"case": case, "trace": _trace(state, "extract_case",
                     f"Classified as {K.CATEGORY_LABELS[case['category']]}; {len(case['claims'])} claims extracted", "llm")}
         except Exception as e:  # fall back to rules on any LLM error
+            llm_failed("extract_case", e)
             err = f" (LLM error: {type(e).__name__})"
         else:
             err = ""
@@ -266,8 +267,8 @@ def assess_risk(state: CampaignState) -> dict:
             for c in r.concerns[:4]:
                 flag("llm_review", "low", c)
             mode = "llm"
-        except Exception:
-            pass
+        except Exception as e:
+            llm_failed("assess_risk", e)
 
     weights = {"high": 35, "medium": 15, "low": 5}
     score = min(100, sum(weights[x["severity"]] for x in flags))
@@ -380,8 +381,8 @@ def draft_story(state: CampaignState) -> dict:
             )
             return {"story": s.model_dump(), "story_attempts": attempts, "story_version": version, "organiser_feedback": "",
                     "trace": _trace(state, "draft_story", f"Version {version} written" + (" (revised)" if feedback else ""), "llm")}
-        except Exception:
-            pass
+        except Exception as e:
+            llm_failed("draft_story", e)
     return {"story": _template_story(case, feedback), "story_attempts": attempts, "story_version": version,
             "organiser_feedback": "",
             "trace": _trace(state, "draft_story", f"Version {version} from template" + (" (revised)" if feedback else ""))}

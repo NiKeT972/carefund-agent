@@ -11,7 +11,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from rank_bm25 import BM25Okapi
 
-from .llm import get_llm
+from .llm import get_llm, llm_failed
 
 _STOP = set("a an the is are was were be to of in on for and or with what how who when where why does do did can i you it this that my your our their there".split())
 
@@ -85,6 +85,6 @@ def answer(question: str, knowledge_base: list[str]) -> dict:
             chain = PROMPT | llm
             out = chain.invoke({"context": "\n".join(f"- {s}" for s in sources), "question": q})
             return {"answer": out.content.strip(), "sources": sources, "mode": "llm"}
-        except Exception:
-            pass
+        except Exception as e:
+            llm_failed("donor_answer", e)
     return {"answer": sources[0], "sources": sources, "mode": "retrieval"}

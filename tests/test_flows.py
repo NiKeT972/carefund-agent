@@ -1,6 +1,5 @@
 import os, sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
-os.environ.pop("GROQ_API_KEY", None)
 from fastapi.testclient import TestClient
 from app import app
 from carefund.samples import CLEAN, RISKY
