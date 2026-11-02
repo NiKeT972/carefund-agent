@@ -14,11 +14,11 @@ def test_clean_case_publishes():
     assert r["paused_at"] == "organiser_approval"
     assert r["state"]["story_issues"] == []
     # organiser asks for a change -> redraft -> paused again
-    r2 = c.post("/api/campaign/resume", json={"state": r["state"], "paused_at": r["paused_at"],
+    r2 = c.post("/api/campaign/resume", json={"token": r["token"],
                "decision": "changes", "feedback": "mention dad is the donor"}).json()
     assert r2["paused_at"] == "organiser_approval"
     assert nodes(r2).count("draft_story") == 2
-    r3 = c.post("/api/campaign/resume", json={"state": r2["state"], "paused_at": "organiser_approval", "decision": "approve"}).json()
+    r3 = c.post("/api/campaign/resume", json={"token": r2["token"], "decision": "approve"}).json()
     assert r3["paused_at"] is None and r3["state"]["status"] == "live"
     kb = r3["state"]["campaign"]["knowledge_base"]
     a = c.post("/api/donor/ask", json={"question": "Where does my money go?", "knowledge_base": kb}).json()
@@ -33,14 +33,14 @@ def test_risky_case_flags_and_reject():
     assert s["risk_level"] == "high"
     assert {"cost_outlier", "goal_above_gap", "direct_payment", "no_estimate", "unrelated_organiser"} <= codes, codes
     assert r["paused_at"] == "fraud_review"
-    rj = c.post("/api/campaign/resume", json={"state": s, "paused_at": "fraud_review", "decision": "reject", "note": "UPI ask"}).json()
+    rj = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "reject", "note": "UPI ask"}).json()
     assert rj["state"]["status"] == "rejected"
 
 def test_risky_request_info_and_approve():
-    s = c.post("/api/campaign/start", json=RISKY).json()["state"]
-    ri = c.post("/api/campaign/resume", json={"state": s, "paused_at": "fraud_review", "decision": "request_info"}).json()
+    tok = c.post("/api/campaign/start", json=RISKY).json()["token"]
+    ri = c.post("/api/campaign/resume", json={"token": tok, "decision": "request_info"}).json()
     assert ri["state"]["status"] == "needs_info" and "Cost estimate" in ri["state"]["message"]
-    ap = c.post("/api/campaign/resume", json={"state": s, "paused_at": "fraud_review", "decision": "approve"}).json()
+    ap = c.post("/api/campaign/resume", json={"token": tok, "decision": "approve"}).json()
     assert ap["paused_at"] == "organiser_approval"
 
 def test_meta():
@@ -49,9 +49,62 @@ def test_meta():
 
 def test_feedback_applied_without_llm_and_guardrail():
     r = c.post("/api/campaign/start", json=CLEAN).json()
-    r2 = c.post("/api/campaign/resume", json={"state": r["state"], "paused_at": "organiser_approval",
+    r2 = c.post("/api/campaign/resume", json={"token": r["token"],
                "decision": "changes", "feedback": "Mention that her husband is the kidney donor"}).json()
     assert "Her husband is the kidney donor." in r2["state"]["story"]["body"]
     assert r2["state"]["story_version"] == 2
     for q in ["Will she recover?", "what are her chances", "will the surgery work"]:
         assert c.post("/api/donor/ask", json={"question": q, "knowledge_base": ["x"]}).json()["mode"] == "guardrail"
+
+
+def _forge(token, edit):
+    import base64, json, zlib
+    body, sig = token.rsplit(".", 1)
+    paused = json.loads(zlib.decompress(base64.urlsafe_b64decode(body)))
+    edit(paused)
+    return base64.urlsafe_b64encode(zlib.compress(json.dumps(paused).encode())).decode() + "." + sig
+
+
+def test_tampering_cannot_skip_fraud_review():
+    r = c.post("/api/campaign/start", json=RISKY).json()
+    assert r["paused_at"] == "fraud_review"
+    def lower_risk(p):
+        p["state"].update(risk_level="low", risk_score=0, flags=[])
+    res = c.post("/api/campaign/resume", json={"token": _forge(r["token"], lower_risk), "decision": "approve"})
+    assert res.status_code == 400
+    def jump(p):
+        p["paused_at"] = "organiser_approval"            # try to resume at a later checkpoint
+    assert c.post("/api/campaign/resume", json={"token": _forge(r["token"], jump), "decision": "approve"}).status_code == 400
+
+
+def test_decisions_are_validated_per_checkpoint():
+    r = c.post("/api/campaign/start", json=RISKY).json()
+    assert c.post("/api/campaign/resume", json={"token": r["token"], "decision": "changes"}).status_code == 422
+    assert c.post("/api/campaign/resume", json={"token": r["token"], "decision": "yes"}).status_code == 422
+    ok = c.post("/api/campaign/start", json=CLEAN).json()
+    assert c.post("/api/campaign/resume", json={"token": ok["token"], "decision": "reject"}).status_code == 422
+    assert c.post("/api/campaign/resume", json={"token": ok["token"], "decision": "changes", "feedback": ""}).status_code == 422
+
+
+# Retrieval-only donor answers (no LLM): (question, a phrase the answer must contain; None = must say "don't have").
+DONOR_CASES = [
+    ("Where does my money go?", "directly to Sahyadri"), ("How much is still needed?", "gap"),
+    ("Is this campaign genuine?", "verification"), ("Who is the doctor?", "Meera Kulkarni"),
+    ("Which hospital?", "Sahyadri"), ("How old is the patient?", "age 54"), ("Can I get a tax receipt?", "80G"),
+    ("What happens if extra money is raised?", "refunded"), ("When is the surgery?", "45 days"),
+    ("What is the total cost?", "7,50,000"), ("Who is organising this?", "Rohan Patil"),
+    ("Who is the kidney donor?", None), ("What is the patient's blood group?", None),
+    ("Is the patient married?", None), ("What is the weather in Pune?", None),
+]
+
+
+def test_donor_retrieval_answers_or_admits_it_does_not_know():
+    r = c.post("/api/campaign/start", json=CLEAN).json()
+    kb = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "approve"}).json()["state"]["campaign"]["knowledge_base"]
+    wrong = []
+    for q, expect in DONOR_CASES:
+        a = c.post("/api/donor/ask", json={"question": q, "knowledge_base": kb}).json()["answer"]
+        ok = ("don't have that information" in a) if expect is None else (expect in a)
+        if not ok:
+            wrong.append((q, a))
+    assert not wrong, wrong

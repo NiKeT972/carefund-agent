@@ -23,7 +23,16 @@ _EXPAND = {
     "cost": "estimate total", "costs": "estimate total", "need": "gap goal", "needed": "gap goal", "still": "gap", "remaining": "gap", "left": "gap", "refund": "unused refunded",
     "real": "verified verification documents", "genuine": "verified verification documents", "fake": "verified report",
     "doctor": "dr under", "update": "updates", "updates": "updates", "who": "organised organiser",
+    "when": "within days", "surgery": "treatment transplant operation", "operation": "treatment surgery",
+    "old": "age", "extra": "unused refunded", "leftover": "unused refunded", "organising": "organised organiser",
+    "organizer": "organiser organised", "hospital": "hospital",
 }
+
+# Words too generic to show that a fact answers the question (almost every fact is about the patient/campaign).
+_GENERIC = {"patient", "campaign", "she", "he", "her", "him", "his", "they", "much", "many", "get", "will", "have", "has",
+            "happen", "happens", "tell", "me", "about", "know", "please", "any", "fundraiser", "which", "whom"}
+
+NOT_FOUND = "I don't have that information yet. I've passed your question to the organiser."
 
 
 def _stem(w: str) -> str:
@@ -35,6 +44,21 @@ def _tok(t: str, expand: bool = False) -> list[str]:
     if expand:
         words += [x for w in words for x in _EXPAND.get(w, "").split()]
     return [_stem(w) for w in words if w not in _STOP]
+
+
+def coverage(question: str, fact: str) -> float:
+    """Share of the question's meaningful words that the fact contains, directly or through a synonym.
+
+    BM25 always ranks *something* first, even for "What is the weather in Pune?". Without an LLM to judge
+    the retrieved facts, this score decides whether the top fact actually answers the question.
+    """
+    fact_words = set(_tok(fact))
+    terms = [w for w in _tok(question) if w not in _GENERIC]
+    if not terms:
+        return 1.0
+    def hit(w):
+        return w in fact_words or any(_stem(x) in fact_words for x in _EXPAND.get(w, "").split())
+    return sum(hit(w) for w in terms) / len(terms)
 
 
 class BM25FactRetriever(BaseRetriever):
@@ -75,8 +99,7 @@ def answer(question: str, knowledge_base: list[str]) -> dict:
 
     docs = BM25FactRetriever(facts=knowledge_base).invoke(q)
     if not docs:
-        return {"answer": "I don't have that information yet. I've passed your question to the organiser.",
-                "sources": [], "mode": "rules"}
+        return {"answer": NOT_FOUND, "sources": [], "mode": "rules"}
     sources = [d.page_content for d in docs]
 
     llm = get_llm(0)
@@ -87,4 +110,8 @@ def answer(question: str, knowledge_base: list[str]) -> dict:
             return {"answer": out.content.strip(), "sources": sources, "mode": "llm"}
         except Exception as e:
             llm_failed("donor_answer", e)
-    return {"answer": sources[0], "sources": sources, "mode": "retrieval"}
+    # No LLM: answer with the retrieved fact that best covers the question, or admit we don't know.
+    best = max(sources, key=lambda f: coverage(q, f))      # max() keeps the first (best BM25 rank) on ties
+    if coverage(q, best) < 0.6:
+        return {"answer": NOT_FOUND, "sources": sources, "mode": "retrieval"}
+    return {"answer": best, "sources": sources, "mode": "retrieval"}
