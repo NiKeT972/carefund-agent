@@ -52,11 +52,15 @@ LangGraph 1.x · LangChain Core · langchain-groq (Llama 3.3 70B) · Pydantic ·
 ## Run locally
 
 ```bash
-pip install -r requirements.txt
-export GROQ_API_KEY=...        # optional; without it the agent runs in rules mode
-uvicorn app:app --reload        # open http://localhost:8000
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -r requirements-dev.txt                 # app deps + pytest + uvicorn
+cp .env.example .env                                # then put your GROQ_API_KEY in .env (optional; rules mode without it)
+uvicorn app:app --reload                            # open http://localhost:8000
 pytest -q
+python scripts/live_check.py                        # with the server running: every review path + donor Q&A
 ```
+
+The key is read from `.env` via python-dotenv. Real environment variables take precedence, which is how Vercel supplies it.
 
 ## API
 
