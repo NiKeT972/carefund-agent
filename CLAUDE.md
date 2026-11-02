@@ -5,10 +5,10 @@ LangGraph agent for medical crowdfunding: extract case → check documents → f
 Live: https://carefund-agent.vercel.app (Vercel **auto-deploys on push to `main`**; there is no vercel.json, Vercel detects the FastAPI `app` in `app.py`).
 
 ## Layout
-- `app.py`: FastAPI. `POST /api/campaign/start`, `POST /api/campaign/resume` (`{state, paused_at, decision, note?, feedback?}`), `POST /api/donor/ask`, `GET /api/meta`, `GET /api/health`; `/` serves `public/index.html`.
+- `app.py`: FastAPI. `POST /api/campaign/start`, `POST /api/campaign/resume` (`{token, decision, note?, feedback?}`), `POST /api/donor/ask`, `GET /api/meta`, `GET /api/health`; `/` serves `public/index.html`.
 - `carefund/graph.py`: nodes, routers, `build_graph()`, `start_campaign()`, `resume_campaign()`. The module docstring has the flow.
 - `carefund/knowledge.py`: rule data: required documents per category, cost benchmarks, payment/pressure phrases, banned story phrases, platform policies.
-- `carefund/donor.py`: donor Q&A: `BM25FactRetriever` → medical-advice guardrail (regex) → `PROMPT | llm`; with no LLM it returns the top retrieved fact (`mode: retrieval`).
+- `carefund/donor.py`: donor Q&A: `BM25FactRetriever` → medical-advice guardrail (regex) → `PROMPT | llm`; with no LLM it answers from the best-covering fact or says it doesn't know (`mode: retrieval`).
 - `carefund/llm.py`: `get_llm()` returns `ChatGroq` or `None` when `GROQ_API_KEY` is unset. Loads `.env` with `override=False`. `llm_failed()` logs why a node fell back.
 - `carefund/samples.py`: `clean` (low risk → organiser approval) and `risky` (risk 100 → fraud review).
 - `scripts/live_check.py`: drives both samples through every human path (organiser changes/approve; fraud approve/request_info/reject) plus donor Q&A against a running server, printing each node's output.
