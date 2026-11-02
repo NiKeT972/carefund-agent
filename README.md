@@ -1,5 +1,7 @@
 # CareFund — AI campaign agent for medical crowdfunding
 
+[![tests](https://github.com/NiKeT972/carefund-agent/actions/workflows/tests.yml/badge.svg)](https://github.com/NiKeT972/carefund-agent/actions/workflows/tests.yml)
+
 A **LangGraph** agent that takes a patient's case from an organiser, verifies the documents, scores fraud risk, sends risky cases to a human reviewer, writes the fundraiser story with a self-correcting quality loop, gets the organiser's sign-off, and publishes a campaign page with a **LangChain RAG** assistant that answers donor questions.
 
 **Live demo:** https://carefund-agent.vercel.app
@@ -42,6 +44,8 @@ graph TD
 ## Engineering notes
 
 - **Stateless human-in-the-loop on serverless.** Vercel functions don't keep memory between requests, so the paused graph state is returned to the client. On resume the API rebuilds the graph and calls `update_state(config, state, as_node=<node before the checkpoint>)`; LangGraph then continues from the interrupted node without re-triggering the interrupt.
+- **Tamper-proof paused state.** If the server trusted the state the browser sends back, an organiser could lower `risk_level` and skip fraud review. The paused state (and the checkpoint it paused at) travels inside an HMAC-SHA256-signed token (`carefund/state_token.py`); the API resumes only from tokens it signed and checks the decision is valid for that checkpoint. Set `STATE_SIGNING_KEY` in production.
+- **Honest donor answers without an LLM.** BM25 always ranks *some* fact first, so in retrieval-only mode an answer is given only if a fact covers most of the question's meaningful words (with synonyms); otherwise the question goes to the organiser. A table of real donor questions in the tests checks both cases.
 - **Graceful degradation.** Every LLM node falls back to deterministic logic if no API key is set or the LLM call fails, so the app always works. The UI shows which nodes ran on the LLM, rules or a human.
 - **Tests** cover every path through the graph (clean → publish, risky → reject / request info / approve, organiser revisions, guardrails) and the LLM paths with a stub model: `pytest -q`.
 
@@ -66,8 +70,8 @@ The key is read from `.env` via python-dotenv. Real environment variables take p
 
 | Method | Path | Body |
 |---|---|---|
-| POST | `/api/campaign/start` | `{form, documents[], estimate_text}` → `{state, paused_at}` |
-| POST | `/api/campaign/resume` | `{state, paused_at, decision, note?, feedback?}` |
+| POST | `/api/campaign/start` | `{form, documents[], estimate_text}` → `{state, paused_at, token?}` |
+| POST | `/api/campaign/resume` | `{token, decision, note?, feedback?}`: `token` comes from the paused response; decisions: `approve`/`request_info`/`reject` at fraud review, `approve`/`changes` at organiser approval |
 | POST | `/api/donor/ask` | `{question, knowledge_base[]}` |
 | GET | `/api/meta` | samples, document labels, Mermaid graph |
 
