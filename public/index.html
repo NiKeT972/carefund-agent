@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CareFund — AI campaign agent for medical crowdfunding</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,600&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d2621;--mute:#66706a;--line:#e3e1d9;--brand:#0f6b54;--brand2:#e7f2ee;--warn:#b7791f;--warnbg:#fdf4e3;--bad:#b42318;--badbg:#fdecea;--ok:#127a4a;--okbg:#e6f5ec;--human:#5b3fd1;--humanbg:#efebff}
+*{box-sizing:border-box}body{margin:0;font-family:Inter,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px;line-height:1.5}
+header{display:flex;align-items:center;justify-content:space-between;padding:18px 28px;border-bottom:1px solid var(--line);background:#fff}
+.logo{font-family:Fraunces,serif;font-size:22px;color:var(--brand)}.logo span{color:var(--ink)}
+.sub{color:var(--mute);font-size:13px;margin-left:12px}
+.badge{font-size:12px;padding:4px 10px;border-radius:99px;background:var(--brand2);color:var(--brand);font-weight:600}
+.badge.off{background:#f0efe9;color:var(--mute)}
+main{display:grid;grid-template-columns:minmax(340px,430px) 1fr;gap:22px;padding:22px 28px;max-width:1400px;margin:auto}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:14px}}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px}
+h2{font-size:15px;margin:0 0 12px;font-weight:600}h3{font-size:13px;margin:14px 0 8px;color:var(--mute);text-transform:uppercase;letter-spacing:.04em}
+label{display:block;font-size:12px;color:var(--mute);margin:8px 0 3px}
+input,textarea,select{width:100%;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font:inherit;background:#fcfcfa}
+textarea{resize:vertical}.row{display:grid;grid-template-columns:1fr 1fr;gap:10px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.btn{border:0;border-radius:9px;padding:9px 16px;font:inherit;font-weight:600;cursor:pointer;background:var(--brand);color:#fff}
+.btn:disabled{opacity:.5;cursor:wait}.btn.ghost{background:#fff;color:var(--ink);border:1px solid var(--line)}
+.btn.bad{background:var(--bad)}.btn.human{background:var(--human)}.btns{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.docs{display:grid;grid-template-columns:1fr;gap:4px}.docs label{display:flex;gap:8px;align-items:center;color:var(--ink);font-size:13px;margin:0}
+.docs input{width:auto}
+.empty{color:var(--mute);text-align:center;padding:50px 20px}
+.trace{list-style:none;margin:0;padding:0;position:relative}
+.trace li{display:flex;gap:12px;padding:7px 0;position:relative}
+.trace li:before{content:"";position:absolute;left:11px;top:30px;bottom:-8px;width:2px;background:var(--line)}
+.trace li:last-child:before{display:none}
+.dot{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--brand2);color:var(--brand);z-index:1}
+.dot.llm{background:#e8f0fe;color:#1a56db}.dot.human{background:var(--humanbg);color:var(--human)}.dot.pause{background:var(--warnbg);color:var(--warn)}
+.tn{font-weight:600;font-family:ui-monospace,Menlo,monospace;font-size:12.5px}.td{color:var(--mute);font-size:13px}
+.tag{font-size:10.5px;padding:1px 7px;border-radius:99px;margin-left:6px;font-weight:600;vertical-align:1px}
+.tag.rules{background:#f0efe9;color:var(--mute)}.tag.llm{background:#e8f0fe;color:#1a56db}.tag.human{background:var(--humanbg);color:var(--human)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}@media(max-width:1100px){.grid2{grid-template-columns:1fr}}
+.risk{display:flex;align-items:center;gap:16px}.score{font-size:34px;font-weight:700}
+.lvl{padding:3px 10px;border-radius:99px;font-weight:600;font-size:12px;text-transform:uppercase}
+.lvl.low{background:var(--okbg);color:var(--ok)}.lvl.medium{background:var(--warnbg);color:var(--warn)}.lvl.high{background:var(--badbg);color:var(--bad)}
+.flag{padding:8px 10px;border-radius:8px;margin-top:8px;font-size:13px;border-left:3px solid}
+.flag.high{background:var(--badbg);border-color:var(--bad)}.flag.medium{background:var(--warnbg);border-color:var(--warn)}.flag.low{background:#f4f4f0;border-color:#b9b7ad}
+.chk{display:flex;gap:8px;font-size:13px;padding:3px 0}.ok{color:var(--ok)}.no{color:var(--bad)}
+.panel{border:2px solid var(--human);background:var(--humanbg)}.panel h2{color:var(--human)}
+.story h1{font-family:Fraunces,serif;font-size:24px;margin:4px 0 8px}.story p{margin:0 0 10px}
+.storybody{white-space:pre-wrap;font-size:14.5px;line-height:1.65}
+.status{padding:12px 14px;border-radius:10px;font-weight:500;white-space:pre-wrap}
+.status.live{background:var(--okbg);color:var(--ok)}.status.awaiting_documents,.status.needs_info{background:var(--warnbg);color:#7a4f0e}.status.rejected{background:var(--badbg);color:var(--bad)}
+.camp{border-radius:14px;overflow:hidden;border:1px solid var(--line)}
+.camphead{background:linear-gradient(135deg,#0f6b54,#2a9d7f);color:#fff;padding:22px}
+.camphead h1{font-family:Fraunces,serif;margin:6px 0;font-size:24px}.camphead .pill{background:rgba(255,255,255,.2);padding:3px 10px;border-radius:99px;font-size:12px}
+.prog{height:8px;background:rgba(255,255,255,.3);border-radius:9px;margin-top:12px}.prog div{height:100%;width:3%;background:#fff;border-radius:9px}
+.chat{border-top:1px solid var(--line);padding:16px;background:#fcfcfa}
+.msgs{max-height:320px;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
+.m{padding:8px 12px;border-radius:12px;max-width:85%;font-size:13.5px}.m.q{align-self:flex-end;background:var(--brand);color:#fff}
+.m.a{align-self:flex-start;background:#fff;border:1px solid var(--line)}.m small{display:block;color:var(--mute);margin-top:4px;font-size:11px}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}.chip{font-size:12px;padding:4px 10px;border:1px solid var(--line);border-radius:99px;cursor:pointer;background:#fff}
+.inline{display:flex;gap:8px}.inline input{flex:1}
+details summary{cursor:pointer;color:var(--mute);font-size:13px}
+.mermaid{background:#fff;padding:10px;border-radius:10px;overflow:auto}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes s{to{transform:rotate(360deg)}}
+footer{color:var(--mute);font-size:12px;text-align:center;padding:10px 0 30px}
+</style>
+</head>
+<body>
+<header>
+  <div><span class="logo">Care<span>Fund</span></span><span class="sub">LangGraph agent that verifies, writes and runs medical fundraisers</span></div>
+  <span id="mode" class="badge off">checking…</span>
+</header>
+<main>
+  <section>
+    <div class="card">
+      <h2>1 · Organiser submits a case</h2>
+      <div class="btns" style="margin-top:0"><button class="btn ghost" onclick="loadSample('clean')">Load genuine case</button><button class="btn ghost" onclick="loadSample('risky')">Load suspicious case</button></div>
+      <div class="row"><div><label>Organiser name</label><input id="organiser_name"></div><div><label>Patient is organiser's…</label><input id="relation" placeholder="mother, son, self, friend…"></div></div>
+      <div class="row3"><div><label>Patient name</label><input id="patient_name"></div><div><label>Age</label><input id="patient_age" type="number"></div><div><label>City</label><input id="city"></div></div>
+      <div class="row"><div><label>Hospital</label><input id="hospital_name"></div><div><label>Treating doctor</label><input id="doctor_name"></div></div>
+      <div class="row"><div><label>Condition</label><input id="condition"></div><div><label>Treatment</label><input id="treatment"></div></div>
+      <div class="row3"><div><label>Hospital estimate ₹</label><input id="estimated_cost" type="number"></div><div><label>Already arranged ₹</label><input id="amount_arranged" type="number"></div><div><label>Goal ₹</label><input id="goal_amount" type="number"></div></div>
+      <label>Organiser's story notes</label><textarea id="description" rows="4"></textarea>
+      <h3>Documents uploaded</h3><div class="docs" id="docs"></div>
+      <label>Text of the hospital cost estimate (OCR / pasted)</label><textarea id="estimate_text" rows="3"></textarea>
+      <div class="btns"><button class="btn" id="runBtn" onclick="run()">Run agent</button></div>
+    </div>
+    <div class="card"><details><summary>Agent graph (LangGraph, generated from the code)</summary><pre class="mermaid" id="graph"></pre></details></div>
+  </section>
+  <section id="out"><div class="card empty">Load a sample case (or fill the form) and run the agent.<br>Each step of the LangGraph run shows up here, with a <b style="color:var(--human)">human checkpoint</b> wherever a reviewer or the organiser has to decide.</div></section>
+</main>
+<footer>CareFund is a portfolio demo by Niket Korgaonkar · LangGraph + LangChain + FastAPI · all people and documents in the samples are fictional</footer>
+<script type="module">
+import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+window._mermaid = mermaid; mermaid.initialize({startOnLoad:false, theme:"neutral"});
+if (window._graphSrc) renderGraph();
+</script>
+<script>
+const F=["organiser_name","relation","patient_name","patient_age","city","hospital_name","doctor_name","condition","treatment","estimated_cost","amount_arranged","goal_amount","description"];
+let META=null, CUR=null, CHAT=[];
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const inr=n=>"₹"+Number(n||0).toLocaleString("en-IN");
+async function api(path,body){const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});if(!r.ok)throw new Error(await r.text());return r.json()}
+function renderGraph(){if(!window._mermaid||!window._graphSrc)return;$("graph").textContent=window._graphSrc;window._mermaid.run({nodes:[$("graph")]}).catch(()=>{})}
+async function init(){
+  api("/api/health").then(h=>{$("mode").textContent=h.llm?`LLM online · ${h.model}`:"Built-in rules mode (no LLM key)";$("mode").className="badge"+(h.llm?"":" off")}).catch(()=>{$("mode").textContent="API offline"});
+  META=await api("/api/meta");
+  $("docs").innerHTML=Object.entries(META.documents).map(([k,v])=>`<label><input type="checkbox" value="${k}"> ${esc(v)}</label>`).join("");
+  window._graphSrc=META.graph.replace(/^---[\s\S]*?---\s*/,"");renderGraph();loadSample("clean");
+}
+function loadSample(k){const s=META.samples[k];F.forEach(f=>$(f).value=s.form[f]??"");document.querySelectorAll("#docs input").forEach(c=>c.checked=s.documents.includes(c.value));$("estimate_text").value=s.estimate_text||""}
+function collect(){const form={};F.forEach(f=>form[f]=$(f).value);return{form,documents:[...document.querySelectorAll("#docs input:checked")].map(c=>c.value),estimate_text:$("estimate_text").value}}
+function busy(b,btn){document.querySelectorAll("button").forEach(x=>x.disabled=b);if(btn){btn.dataset.t=btn.dataset.t||btn.innerHTML;btn.innerHTML=b?'<span class="spinner"></span>Running…':btn.dataset.t}}
+async function run(){busy(true,$("runBtn"));CHAT=[];try{CUR=await api("/api/campaign/start",collect());render()}catch(e){alert(e.message)}busy(false,$("runBtn"))}
+async function resume(decision,el){const b={state:CUR.state,paused_at:CUR.paused_at,decision};if(CUR.paused_at==="fraud_review")b.note=$("note").value;else b.feedback=$("fb").value;
+  if(CUR.paused_at==="organiser_approval"&&decision!=="approve"&&!b.feedback){alert("Tell the agent what to change.");return}
+  busy(true,el);try{CUR=await api("/api/campaign/resume",b);render()}catch(e){alert(e.message)}busy(false,el)}
+function render(){
+  const s=CUR.state,p=CUR.paused_at;let h="";
+  // trace
+  h+=`<div class="card"><h2>Agent run</h2><ul class="trace">`+s.trace.map((t,i)=>`<li><div class="dot ${t.mode}">${t.mode==="human"?"👤":i+1}</div><div><span class="tn">${esc(t.node)}</span><span class="tag ${t.mode==="llm"?"llm":t.mode==="human"?"human":"rules"}">${t.mode==="llm"?"LLM":t.mode==="human"?"human":"rules"}</span><div class="td">${esc(t.detail)}</div></div></li>`).join("")
+   +(p?`<li><div class="dot pause">⏸</div><div><span class="tn">${p}</span><span class="tag human">waiting</span><div class="td">Paused for a human decision (LangGraph interrupt)</div></div></li>`:"")+`</ul></div>`;
+  // risk + docs
+  if(s.risk_level){h+=`<div class="grid2"><div class="card"><h2>Fraud risk</h2><div class="risk"><div class="score">${s.risk_score}</div><div><span class="lvl ${s.risk_level}">${s.risk_level}</span><div class="td" style="margin-top:4px">${s.flags.length} flag(s) · ${s.trace.find(t=>t.node==='assess_risk')?.mode==='llm'?'rules + LLM review':'rule engine'}</div></div></div>`
+    +(s.flags.length?s.flags.map(f=>`<div class="flag ${f.severity}"><b>${f.severity}</b> · ${esc(f.message)}</div>`).join(""):`<div class="flag low">No red flags found.</div>`)+`</div>`;
+   h+=`<div class="card"><h2>Document verification</h2>`+(s.missing_documents.length?s.missing_documents.map(d=>`<div class="chk"><span class="no">✕</span>Missing: ${esc(META.documents[d])}</div>`).join(""):`<div class="chk"><span class="ok">✓</span>All required documents uploaded</div>`)
+    +(s.document_checks.length?`<h3>Estimate cross-checks</h3>`+s.document_checks.map(c=>`<div class="chk"><span class="${c.ok?"ok":"no"}">${c.ok?"✓":"✕"}</span><div><b>${esc(c.check)}</b><br><span class="td">${esc(c.detail)}</span></div></div>`).join(""):"")+`</div></div>`}
+  // HITL panels
+  if(p==="fraud_review"){h+=`<div class="card panel"><h2>👤 Verification team: your call</h2><p class="td">The agent paused because risk is <b>${s.risk_level}</b>. Approve to let it draft the campaign, ask the organiser for information, or reject.</p><label>Reviewer note (sent to the organiser)</label><textarea id="note" rows="2" placeholder="e.g. Please upload the estimate from the hospital named in the form"></textarea>
+     <div class="btns"><button class="btn human" onclick="resume('approve',this)">Approve & draft</button><button class="btn ghost" onclick="resume('request_info',this)">Request documents</button><button class="btn bad" onclick="resume('reject',this)">Reject</button></div></div>`}
+  if(p==="organiser_approval"&&s.story){h+=`<div class="card panel"><h2>👤 Organiser: approve your campaign story</h2><p class="td">Version ${s.story_version} · passed the agent's quality checks${s.story_issues?.length?` with ${s.story_issues.length} remaining issue(s): ${esc(s.story_issues.join("; "))}`:""}.</p>
+     <div class="story" style="background:#fff;padding:16px;border-radius:10px"><h1>${esc(s.story.title)}</h1><p class="td"><i>${esc(s.story.summary)}</i></p><div class="storybody">${esc(s.story.body)}</div></div>
+     <label>Ask for changes</label><input id="fb" placeholder="e.g. Mention that my father is the kidney donor">
+     <div class="btns"><button class="btn human" onclick="resume('approve',this)">Approve & publish</button><button class="btn ghost" onclick="resume('changes',this)">Rewrite with my changes</button></div></div>`}
+  // final
+  if(!p&&s.status){h+=`<div class="card"><h2>Outcome</h2><div class="status ${s.status}">${esc(s.message)}</div></div>`;
+   if(s.campaign){const c=s.campaign;h+=`<div class="card" style="padding:0"><div class="camp"><div class="camphead"><span class="pill">${esc(c.category)}</span> <span class="pill">${s.status==="live"?"✓ Verified":"Verification pending"}</span><h1>${esc(c.title)}</h1><div>Goal ${c.goal_display} · ${esc(c.hospital)}</div><div class="prog"><div></div></div></div>
+     <div style="padding:18px 20px" class="storybody">${esc(c.body)}</div>
+     <div class="chat"><h2>Ask about this campaign <span class="tag rules">RAG over ${c.knowledge_base.length} facts</span></h2><div class="chips">${["Where does my money go?","How much is still needed?","Is this campaign genuine?","Who is the doctor?","Will she recover?"].map(q=>`<span class="chip" onclick="ask('${q}')">${q}</span>`).join("")}</div>
+     <div class="msgs" id="msgs">${CHAT.map(chatHtml).join("")}</div><div class="inline"><input id="q" placeholder="Ask a donor question…" onkeydown="if(event.key==='Enter')ask()"><button class="btn" onclick="ask()">Ask</button></div></div></div></div>`}}
+  $("out").innerHTML=h;$("out").scrollIntoView({behavior:"smooth",block:"start"});
+}
+function chatHtml(m){return m.q?`<div class="m q">${esc(m.q)}</div>`:`<div class="m a">${esc(m.answer)}<small>${m.mode}${m.sources?.length?` · ${m.sources.length} source(s)`:""}</small></div>`}
+async function ask(q){q=q||$("q").value.trim();if(!q)return;CHAT.push({q});$("msgs").innerHTML=CHAT.map(chatHtml).join("");$("q").value="";
+  const a=await api("/api/donor/ask",{question:q,knowledge_base:CUR.state.campaign.knowledge_base});CHAT.push(a);const m=$("msgs");m.innerHTML=CHAT.map(chatHtml).join("");m.scrollTop=m.scrollHeight}
+init();
+</script>
+</body>
+</html>
