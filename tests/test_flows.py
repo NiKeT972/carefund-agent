@@ -96,6 +96,9 @@ DONOR_CASES = [
     ("What is the total cost?", "7,50,000"), ("Who is organising this?", "Rohan Patil"),
     ("Who is the kidney donor?", None), ("What is the patient's blood group?", None),
     ("Is the patient married?", None), ("What is the weather in Pune?", None),
+    # added with the eval set (evals/donor_cases.jsonl): contractions and -ing/-ed word forms
+    ("Who is the doctor treating her?", "Meera Kulkarni"), ("What happens to extra money if it isn't needed?", "refunded"),
+    ("Who is organising this fundraiser?", "Rohan Patil"),
 ]
 
 
@@ -147,3 +150,41 @@ def test_pending_campaign_is_marked_and_rejected_one_gets_no_link():
     r = c.post("/api/campaign/start", json=RISKY).json()
     rej = c.post("/api/campaign/resume", json={"token": r["token"], "decision": "reject"}).json()
     assert "campaign_token" not in rej
+
+
+def test_phrases_match_whole_words_only():
+    """'upi' inside 'Jupiter Hospital' used to flag direct payment and fail the story check (held-out case h01)."""
+    from carefund.graph import has_phrase
+    assert not has_phrase("admitted to jupiter hospital", "upi")
+    assert has_phrase("send it to my upi id", "upi") and has_phrase("deposit in my sbi a/c no 123", "a/c")
+    case = {**CLEAN, "form": {**CLEAN["form"], "hospital_name": "Jupiter Hospital",
+                              "description": "My mother is admitted to Jupiter Hospital for a kidney transplant."},
+            "estimate_text": ""}
+    r = c.post("/api/campaign/start", json=case).json()
+    assert r["paused_at"] == "organiser_approval" and r["state"]["story_issues"] == [], r["state"]["flags"]
+
+
+def test_single_concrete_inconsistency_goes_to_a_human():
+    """One medium flag (e.g. a friend organising without the family's letter) is enough for fraud review."""
+    form = {**CLEAN["form"], "relation": "friend"}
+    r = c.post("/api/campaign/start", json={**CLEAN, "form": form}).json()
+    assert [f["code"] for f in r["state"]["flags"]] == ["unrelated_organiser"]
+    assert r["paused_at"] == "fraud_review"
+
+
+def test_account_numbers_are_not_read_as_amounts():
+    from carefund.graph import _amounts_in_text
+    assert _amounts_in_text("deposit in a/c no 30211223344, total 5 lakh") == [500000.0]
+
+
+def test_eval_rules_mode_does_not_regress():
+    """The labelled eval set (scripts/eval.py) must not get worse. Thresholds sit just below the current scores."""
+    sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), "scripts"))
+    import eval as ev
+    m = ev.run(force_rules=True)
+    assert m["metrics"]["fraud_review_recall"] == 100.0, m["failed_cases"]
+    assert m["metrics"]["fraud_review_false_alarms"] == 0, m["failed_cases"]
+    assert m["metrics"]["task_success"] >= 95, m["failed_cases"]
+    assert m["metrics"]["medical_question_refusals"] == 100.0, m["donor_misses"]
+    assert m["metrics"]["donor_answer_accuracy"] >= 90, m["donor_misses"]
+    assert m["holdout"]["fraud_review_false_alarms"] == 0, m["holdout"]["failed_cases"]
