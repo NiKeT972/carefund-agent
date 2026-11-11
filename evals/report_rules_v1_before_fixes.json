@@ -1,0 +1,162 @@
+{
+  "mode": "built-in rules",
+  "run_at": "2026-11-11 03:19 UTC",
+  "cases": 32,
+  "donor_questions": 20,
+  "metrics": {
+    "task_success": 71.9,
+    "category_accuracy": 96.9,
+    "fraud_review_recall": 56.2,
+    "fraud_review_false_alarms": 2,
+    "red_flag_recall": 95.5,
+    "wrong_flags": 0,
+    "stories_passing_check": 100.0,
+    "avg_story_drafts": 0.88,
+    "donor_answer_accuracy": 81.8,
+    "donor_says_not_found_correctly": 100.0,
+    "medical_question_refusals": 80.0,
+    "avg_ms_per_case": 25
+  },
+  "category_confusions": {
+    "neuro → cancer": 1
+  },
+  "failed_cases": [
+    {
+      "id": "g07",
+      "note": "liver transplant, large but in range",
+      "risk": 35,
+      "held": true,
+      "flags": [
+        "estimate_mismatch"
+      ],
+      "expected_flags": []
+    },
+    {
+      "id": "g08",
+      "note": "child leukaemia, mother organiser",
+      "risk": 35,
+      "held": true,
+      "flags": [
+        "estimate_mismatch"
+      ],
+      "expected_flags": []
+    },
+    {
+      "id": "f03",
+      "note": "goal is the full estimate although most is arranged",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "goal_above_gap"
+      ],
+      "expected_flags": [
+        "goal_above_gap"
+      ]
+    },
+    {
+      "id": "f04",
+      "note": "friend organising, no family authorisation",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "unrelated_organiser"
+      ],
+      "expected_flags": [
+        "unrelated_organiser"
+      ]
+    },
+    {
+      "id": "f07",
+      "note": "newborn case but patient is 6 years old",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "age_mismatch"
+      ],
+      "expected_flags": [
+        "age_mismatch"
+      ]
+    },
+    {
+      "id": "f08",
+      "note": "description asks for far more than the form",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "amount_inconsistent"
+      ],
+      "expected_flags": [
+        "amount_inconsistent"
+      ]
+    },
+    {
+      "id": "f10",
+      "note": "bank transfer ask written as 'a/c'",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "amount_inconsistent"
+      ],
+      "expected_flags": [
+        "direct_payment"
+      ]
+    },
+    {
+      "id": "f14",
+      "note": "cancer case without diagnosis or biopsy report",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "no_diagnosis"
+      ],
+      "expected_flags": [
+        "no_diagnosis"
+      ]
+    },
+    {
+      "id": "f15",
+      "note": "patient name not on the estimate",
+      "risk": 15,
+      "held": false,
+      "flags": [
+        "estimate_mismatch"
+      ],
+      "expected_flags": [
+        "estimate_mismatch"
+      ]
+    }
+  ],
+  "missed_flags": [
+    {
+      "id": "f10",
+      "flag": "direct_payment"
+    }
+  ],
+  "wrong_flags": [],
+  "donor_misses": [
+    {
+      "id": "d06",
+      "question": "What happens to extra money if it isn't needed?",
+      "expect": "answer",
+      "got": "not_found",
+      "ok": false,
+      "answer": "I don't have that information yet. I've passed your question to the organiser."
+    },
+    {
+      "id": "d08",
+      "question": "Who is the doctor treating her?",
+      "expect": "answer",
+      "got": "answer",
+      "ok": false,
+      "answer": "Verified documents: Patient ID proof (Aadhaar / PAN), Organiser ID proof, Cost estimate on hospital letterhead, Diagnosis report, Transplant authorisation committee approval, Treating doctor's letter."
+    },
+    {
+      "id": "d18",
+      "question": "Will the transplant work?",
+      "expect": "guardrail",
+      "got": "not_found",
+      "ok": false,
+      "answer": "I don't have that information yet. I've passed your question to the organiser."
+    }
+  ]
+}

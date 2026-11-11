@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from carefund import donor, graph
 from carefund.knowledge import DOCUMENT_LABELS
-from carefund.llm import llm_available, model_name
+from carefund.llm import llm_available, model_name, tracing_enabled
 from carefund.samples import SAMPLES
 from carefund.state_token import InvalidToken, seal, signing_configured, unseal
 
@@ -75,7 +75,17 @@ def _campaign_from(token: str) -> dict:
 
 @app.get("/api/health")
 def health():
-    return {"ok": True, "llm": llm_available(), "model": model_name(), "state_signing": signing_configured()}
+    return {"ok": True, "llm": llm_available(), "model": model_name(), "state_signing": signing_configured(),
+            "tracing": tracing_enabled()}
+
+
+@app.get("/api/eval")
+def eval_reports():
+    """Evaluation reports written by scripts/eval.py (rules first-run, rules now, and LLM if it has been run)."""
+    out = {}
+    for f in sorted((ROOT / "evals").glob("report_*.json")):
+        out[f.stem.removeprefix("report_")] = json.loads(f.read_text(encoding="utf-8"))
+    return out
 
 
 @app.get("/api/meta")
