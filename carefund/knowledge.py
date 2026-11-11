@@ -56,13 +56,20 @@ CATEGORY_DOCUMENTS = {
     "other": ["doctor_letter"],
 }
 
+# Words that many hospital names share, so they don't show that two names are the same hospital.
+GENERIC_HOSPITAL_WORDS = {"hospital", "hospitals", "clinic", "centre", "center", "institute", "the", "and", "for",
+                          "care", "medical", "sciences", "research", "super", "speciality", "specialty", "superspeciality",
+                          "multispeciality", "cancer", "heart", "kidney", "liver", "children", "memorial", "general",
+                          "health", "healthcare", "city", "nursing", "home", "trust"}
+
 CLOSE_RELATIONS = {"self", "parent", "mother", "father", "spouse", "wife", "husband", "child", "son",
                    "daughter", "sibling", "brother", "sister", "guardian"}
 
 PRESSURE_PHRASES = ["only today", "within hours", "will die tonight", "last chance", "act now", "urgent urgent",
                     "or else", "no time left", "guaranteed cure", "100% cure", "miracle"]
 PAYMENT_PHRASES = ["upi", "gpay", "google pay", "paytm", "phonepe", "my account", "bank account",
-                   "account number", "ifsc", "send money directly", "transfer to"]
+                   "account number", "ifsc", "send money directly", "transfer to", "a/c", "acct", "neft",
+                   "imps", "deposit in my", "deposit to my"]
 
 STORY_BANNED = ["guaranteed", "miracle", "100%", "will surely die", "only today", "last chance", "upi", "ifsc",
                 "account number"]

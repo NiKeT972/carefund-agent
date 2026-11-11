@@ -11,9 +11,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.retrievers import BaseRetriever
 from rank_bm25 import BM25Okapi
 
-from .llm import get_llm, llm_failed
+from .llm import get_llm, llm_failed, run_config
 
-_STOP = set("a an the is are was were be to of in on for and or with what how who when where why does do did can i you it this that my your our their there".split())
+_STOP = set("a an the is are was were be to of in on for and or with what how who when where why does do did can i you it this that my your our their there".split()
+            + "isn aren wasn doesn didn don won t s ll ve re d".split())   # pieces of "isn't", "she'll", "they've"...
 
 
 # Small query-expansion map so everyday donor wording matches the campaign's wording.
@@ -36,6 +37,10 @@ NOT_FOUND = "I don't have that information yet. I've passed your question to the
 
 
 def _stem(w: str) -> str:
+    """Tiny stemmer: "treating"/"treatment" -> "treat", "organised" -> "organis", "updates" -> "update". Enough for short campaign facts."""
+    for suf in ("ment", "ing", "ed"):
+        if len(w) > len(suf) + 3 and w.endswith(suf):
+            return w[: -len(suf)]
     return w[:-1] if len(w) > 4 and w.endswith("s") else w
 
 
@@ -75,8 +80,8 @@ class BM25FactRetriever(BaseRetriever):
         return [Document(page_content=self.facts[i], metadata={"score": float(scores[i])}) for i in ranked if scores[i] > 0]
 
 
-MEDICAL_ADVICE = re.compile(r"\b(surviv\w*|recover\w*|prognosis|cure\w*|chances?|life expectancy|will (it|the surgery|"
-                            r"treatment) work|success rate|which hospital is better|what medicine|side effects?|be ok(ay)?|get better)\b")
+MEDICAL_ADVICE = re.compile(r"\b(surviv\w*|recover\w*|prognosis|cure\w*|chances?|life expectancy|will (it|this|the \w+|"
+                            r"treatment|surgery) work|success rate|which hospital is better|what medicine|side effects?|be ok(ay)?|get better)\b")
 
 PROMPT = ChatPromptTemplate.from_messages([
     ("system",
@@ -106,7 +111,7 @@ def answer(question: str, knowledge_base: list[str]) -> dict:
     if llm is not None:
         try:
             chain = PROMPT | llm
-            out = chain.invoke({"context": "\n".join(f"- {s}" for s in sources), "question": q})
+            out = chain.invoke({"context": "\n".join(f"- {s}" for s in sources), "question": q}, run_config("donor_answer"))
             return {"answer": out.content.strip(), "sources": sources, "mode": "llm"}
         except Exception as e:
             llm_failed("donor_answer", e)

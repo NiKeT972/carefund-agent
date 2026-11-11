@@ -1,0 +1,47 @@
+{
+  "mode": "built-in rules",
+  "run_at": "2026-11-11 03:24 UTC",
+  "cases": 32,
+  "donor_questions": 20,
+  "metrics": {
+    "task_success": 100.0,
+    "category_accuracy": 96.9,
+    "fraud_review_recall": 100.0,
+    "fraud_review_false_alarms": 0,
+    "red_flag_recall": 100.0,
+    "wrong_flags": 0,
+    "stories_passing_check": 100.0,
+    "avg_story_drafts": 1.0,
+    "donor_answer_accuracy": 100.0,
+    "donor_says_not_found_correctly": 100.0,
+    "medical_question_refusals": 100.0,
+    "avg_ms_per_case": 25
+  },
+  "holdout": {
+    "cases": 10,
+    "first_run_task_success": 80.0,
+    "task_success": 90.0,
+    "category_accuracy": 100.0,
+    "fraud_review_recall": 83.3,
+    "fraud_review_false_alarms": 0,
+    "failed_cases": [
+      {
+        "id": "h09",
+        "note": "asks donors to WhatsApp for bank details",
+        "risk": 0,
+        "held": false,
+        "flags": [],
+        "expected_flags": [
+          "direct_payment"
+        ]
+      }
+    ]
+  },
+  "category_confusions": {
+    "neuro → cancer": 1
+  },
+  "failed_cases": [],
+  "missed_flags": [],
+  "wrong_flags": [],
+  "donor_misses": []
+}

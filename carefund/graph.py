@@ -22,7 +22,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from . import knowledge as K
-from .llm import get_llm, llm_failed
+from .llm import get_llm, llm_failed, run_config
 
 
 # --------------------------------------------------------------------------- state
@@ -67,6 +67,11 @@ def _inr(n: float | int | None) -> str:
     return ("-" if n < 0 else "") + "₹" + s
 
 
+def _a(phrase: str) -> str:
+    """'a kidney transplant' / 'an emergency surgery'."""
+    return ("an " if phrase[:1].lower() in "aeiou" else "a ") + phrase
+
+
 def _num(v: Any) -> float:
     try:
         return float(str(v).replace(",", "").replace("₹", "").strip() or 0)
@@ -78,7 +83,9 @@ def _amounts_in_text(text: str) -> list[float]:
     """Find rupee amounts in free text, understanding 'lakh' / 'crore'."""
     out = []
     for m in re.finditer(r"(?:₹|rs\.?|inr)?\s*([\d][\d,]*(?:\.\d+)?)\s*(lakh|lakhs|lac|crore|cr|l)?\b", text.lower()):
-        raw, unit = m.group(1), m.group(2)
+        raw, unit = m.group(1).rstrip(","), m.group(2)
+        if "," not in raw and len(raw.split(".")[0]) >= 9:   # a 9+ digit run with no grouping is an account/phone number
+            continue
         try:
             val = float(raw.replace(",", ""))
         except ValueError:
@@ -90,6 +97,11 @@ def _amounts_in_text(text: str) -> list[float]:
         if val >= 10_000:
             out.append(val)
     return out
+
+
+def has_phrase(text: str, phrase: str) -> bool:
+    """Whole-word phrase match. Plain `in` matched "upi" inside "Jupiter Hospital" and flagged a genuine case."""
+    return re.search(rf"(?<![a-z0-9]){re.escape(phrase)}(?![a-z0-9])", text) is not None
 
 
 # --------------------------------------------------------------------------- 1. extract
@@ -180,9 +192,7 @@ def check_documents(state: CampaignState) -> dict:
     checks = []
     est_text = (state.get("estimate_text") or "").strip()
     if est_text:
-        hosp = case["hospital"].lower()
-        hosp_words = [w for w in re.findall(r"[a-z]+", hosp) if len(w) > 3 and w not in {"hospital", "hospitals", "clinic", "centre", "center"}]
-        hosp_ok = bool(hosp) and (hosp in est_text.lower() or (hosp_words and all(w in est_text.lower() for w in hosp_words)))
+        hosp_ok = _hospital_matches(case["hospital"], est_text)
         checks.append({"check": "Hospital on estimate matches form", "ok": hosp_ok,
                        "detail": "Found" if hosp_ok else f"'{case['hospital']}' not found in the estimate text"})
         name_ok = bool(case["patient_name"]) and case["patient_name"].split()[0].lower() in est_text.lower()
@@ -202,6 +212,23 @@ def check_documents(state: CampaignState) -> dict:
         detail += f"; {sum(c['ok'] for c in checks)}/{len(checks)} estimate cross-checks passed"
     return {"missing_documents": missing, "document_checks": checks,
             "trace": _trace(state, "check_documents", detail)}
+
+
+def _hospital_matches(hospital: str, text: str) -> bool:
+    """Is the form's hospital the one on the estimate? Hospitals go by several names ("MNJ Cancer Hospital" prints
+    "MNJ Institute of Oncology"; "Institute of Liver and Biliary Sciences" prints "ILBS"), so compare only the
+    distinctive words, and also accept the acronym of the full name."""
+    hosp, t = hospital.lower().strip(), text.lower()
+    if not hosp:
+        return False
+    if hosp in t:
+        return True
+    words = re.findall(r"[a-z]+", hosp)
+    distinctive = [w for w in words if len(w) >= 3 and w not in K.GENERIC_HOSPITAL_WORDS]
+    if distinctive and all(re.search(rf"\b{w}\b", t) for w in distinctive):
+        return True
+    acronym = "".join(w[0] for w in words if w not in {"of", "and", "the", "for"})
+    return len(acronym) >= 3 and re.search(rf"\b{acronym}\b", t) is not None
 
 
 # --------------------------------------------------------------------------- 3. risk
@@ -243,9 +270,9 @@ def assess_risk(state: CampaignState) -> dict:
         if not c["ok"]:
             flag("estimate_mismatch", "high" if "amount" in c["check"].lower() or "Hospital" in c["check"] else "medium",
                  f"{c['check']}: {c['detail']}.")
-    if any(p in desc for p in K.PAYMENT_PHRASES):
+    if any(has_phrase(desc, p) for p in K.PAYMENT_PHRASES):
         flag("direct_payment", "high", "Description asks donors to pay a personal account/UPI directly instead of through the platform.")
-    if any(p in desc for p in K.PRESSURE_PHRASES):
+    if any(has_phrase(desc, p) for p in K.PRESSURE_PHRASES):
         flag("pressure_language", "low", "Description uses high-pressure or exaggerated language.")
     stated = _amounts_in_text(desc)
     if stated and case["estimated_cost"]:
@@ -272,7 +299,10 @@ def assess_risk(state: CampaignState) -> dict:
 
     weights = {"high": 35, "medium": 15, "low": 5}
     score = min(100, sum(weights[x["severity"]] for x in flags))
-    level = "high" if score >= 60 else "medium" if score >= 30 else "low"
+    # Any concrete inconsistency (a medium or high flag) gets a human look, even on its own. Low flags (pressure
+    # language, LLM concerns) only add up: they can push a case over 30 but never trigger review by themselves.
+    serious = any(x["severity"] in ("medium", "high") for x in flags)
+    level = "high" if score >= 60 else "medium" if score >= 30 or serious else "low"
     return {"flags": flags, "risk_score": score, "risk_level": level,
             "trace": _trace(state, "assess_risk", f"Risk {score}/100 ({level}); {len(flags)} flag(s)", mode)}
 
@@ -334,7 +364,7 @@ def _template_story(case: dict, feedback: str) -> dict:
         f"My name is {case['organiser'] or 'the organiser'}, and I am raising funds for my {rel} {name}{age} from {case['city'] or 'India'}.",
         f"{first} has been diagnosed with {low(case['condition_plain'] or case['condition'])}. The doctors at {case['hospital']}"
         + (f", led by {case['doctor']}," if case["doctor"] else "")
-        + f" have advised a {low(case['treatment_plain'] or case['treatment'])}"
+        + f" have advised {_a(low(case['treatment_plain'] or case['treatment']))}"
         + (f", which needs to happen within {case['urgency_days']} days." if case.get("urgency_days") else "."),
         f"The hospital has estimated the total cost at {_inr(case['estimated_cost'])}. Our family has already arranged "
         f"{_inr(case['amount_arranged'])} through savings, insurance and help from relatives, but we still have a gap of "
@@ -400,7 +430,7 @@ def check_story(state: CampaignState) -> dict:
     if case["goal_amount"] and str(int(case["goal_amount"])) not in digits:
         issues.append(f"State the goal amount {_inr(case['goal_amount'])}")
     for b in K.STORY_BANNED:
-        if b in text:
+        if has_phrase(text, b):
             issues.append(f"Remove the phrase '{b}'")
     words = len(story["body"].split())
     if words < 120:
@@ -506,7 +536,8 @@ def _finish(graph, cfg) -> dict:
 
 def start_campaign(form: dict, documents: list, estimate_text: str = "") -> dict:
     graph = build_graph()
-    cfg = {"configurable": {"thread_id": "campaign"}}
+    cfg = {"configurable": {"thread_id": "campaign"},
+           **run_config("start_campaign", documents=len(documents), relation=form.get("relation", ""))}
     graph.invoke({"form": form, "documents": documents, "estimate_text": estimate_text, "trace": [],
                   "story_attempts": 0}, cfg)
     return _finish(graph, cfg)
@@ -517,7 +548,8 @@ def resume_campaign(state: dict, paused_at: str, decision: dict) -> dict:
     if paused_at not in RESUME_FROM:
         raise ValueError(f"Cannot resume at {paused_at!r}")
     graph = build_graph()
-    cfg = {"configurable": {"thread_id": "campaign"}}
+    cfg = {"configurable": {"thread_id": "campaign"},
+           **run_config("resume_campaign", checkpoint=paused_at, decision=decision.get("decision", ""))}
     seed = dict(state)
     if paused_at == "fraud_review":
         seed["review"] = {"decision": decision.get("decision"), "note": decision.get("note", "")}

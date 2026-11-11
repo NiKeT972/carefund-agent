@@ -7,4 +7,5 @@ import os
 import sys
 
 os.environ["GROQ_API_KEY"] = ""
+os.environ["LANGSMITH_TRACING"] = "false"     # never send test runs to LangSmith
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
