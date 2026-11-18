@@ -62,13 +62,21 @@ details summary{cursor:pointer;color:var(--mute);font-size:13px}
 .mermaid{background:#fff;padding:10px;border-radius:10px;overflow:auto}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid #fff;border-right-color:transparent;border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:6px}@keyframes s{to{transform:rotate(360deg)}}
 footer{color:var(--mute);font-size:12px;text-align:center;padding:10px 0 30px}
+.meter{height:8px;border-radius:9px;background:linear-gradient(90deg,var(--ok) 0 30%,var(--warn) 30% 60%,var(--bad) 60%);position:relative;margin:10px 0 2px;opacity:.85}
+.meter i{position:absolute;top:-4px;width:4px;height:16px;border-radius:2px;background:var(--ink);transform:translateX(-2px)}
+.steps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-top:18px;text-align:left}@media(max-width:700px){.steps{grid-template-columns:1fr 1fr}}
+.steps div{border:1px solid var(--line);border-radius:10px;padding:10px 12px;background:#fcfcfa}.steps b{display:block;font-size:13px;color:var(--ink)}.steps span{font-size:12px}
+table.ev{width:100%;border-collapse:collapse;font-size:13px;margin-top:8px}table.ev td,table.ev th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:right}
+table.ev th{color:var(--mute);font-weight:500;font-size:12px}table.ev td:first-child,table.ev th:first-child{text-align:left}
+.up{color:var(--ok);font-weight:600}.note{font-size:12px;color:var(--mute);margin-top:8px}
+.m details{margin-top:4px}.m details summary{font-size:11px}.m ul{margin:4px 0 0;padding-left:16px;font-size:12px;color:var(--mute)}
 .sharebox{margin-top:12px;border:1px solid var(--line);border-radius:10px;padding:12px;background:#fcfcfa}.sharebox .inline{margin:8px 0 6px}.sharebox small{color:var(--mute)}.sharebox a.btn{text-decoration:none}
 </style>
 </head>
 <body>
 <header>
   <div><span class="logo">Care<span>Fund</span></span><span class="sub">LangGraph agent that verifies, writes and runs medical fundraisers</span></div>
-  <span id="mode" class="badge off">checking…</span>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end"><span id="trace" class="badge off" style="display:none">LangSmith tracing on</span><span id="mode" class="badge off">checking…</span></div>
 </header>
 <main>
   <section>
@@ -86,8 +94,10 @@ footer{color:var(--mute);font-size:12px;text-align:center;padding:10px 0 30px}
       <div class="btns"><button class="btn" id="runBtn" onclick="run()">Run agent</button></div>
     </div>
     <div class="card"><details><summary>Agent graph (LangGraph, generated from the code)</summary><pre class="mermaid" id="graph"></pre></details></div>
+    <div class="card"><details id="evalBox"><summary>Evaluation: how well does the agent do on labelled cases?</summary><div id="eval" class="td">Loading…</div></details></div>
   </section>
-  <section id="out"><div class="card empty">Load a sample case (or fill the form) and run the agent.<br>Each step of the LangGraph run shows up here, with a <b style="color:var(--human)">human checkpoint</b> wherever a reviewer or the organiser has to decide.</div></section>
+  <section id="out"><div class="card empty">Load a sample case (or fill the form) and run the agent.<br>Each step of the LangGraph run shows up here, with a <b style="color:var(--human)">human checkpoint</b> wherever a reviewer or the organiser has to decide.
+    <div class="steps"><div><b>1 · Verify</b><span>Extract the case, check documents and cross-check the hospital estimate.</span></div><div><b>2 · Score risk</b><span>Rule-based red flags (+ LLM analyst). Any real inconsistency goes to a human.</span></div><div><b>3 · Write</b><span>Draft the story, check it, and rewrite until it passes.</span></div><div><b>4 · Publish</b><span>Organiser approves; donors get a signed page with grounded Q&amp;A.</span></div></div></div></section>
 </main>
 <footer>CareFund is a portfolio demo by Niket Korgaonkar · LangGraph + LangChain + FastAPI · all people and documents in the samples are fictional</footer>
 <script type="module">
@@ -104,7 +114,8 @@ const inr=n=>"₹"+Number(n||0).toLocaleString("en-IN");
 async function api(path,body){const r=await fetch(path,body?{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)}:{});if(!r.ok)throw new Error(await r.text());return r.json()}
 function renderGraph(){if(!window._mermaid||!window._graphSrc)return;$("graph").textContent=window._graphSrc;window._mermaid.run({nodes:[$("graph")]}).catch(()=>{})}
 async function init(){
-  api("/api/health").then(h=>{$("mode").textContent=h.llm?`LLM online · ${h.model}`:"Built-in rules mode (no LLM key)";$("mode").className="badge"+(h.llm?"":" off")}).catch(()=>{$("mode").textContent="API offline"});
+  api("/api/health").then(h=>{$("mode").textContent=h.llm?`LLM online · ${h.model}`:"Built-in rules mode (no LLM key)";$("mode").className="badge"+(h.llm?"":" off");if(h.tracing){$("trace").style.display="";$("trace").className="badge"}}).catch(()=>{$("mode").textContent="API offline"});
+  api("/api/eval").then(renderEval).catch(()=>{$("eval").textContent="No evaluation report found."});
   META=await api("/api/meta");
   $("docs").innerHTML=Object.entries(META.documents).map(([k,v])=>`<label><input type="checkbox" value="${k}"> ${esc(v)}</label>`).join("");
   window._graphSrc=META.graph.replace(/^---[\s\S]*?---\s*/,"");renderGraph();loadSample("clean");
@@ -122,8 +133,8 @@ function render(){
   h+=`<div class="card"><h2>Agent run</h2><ul class="trace">`+s.trace.map((t,i)=>`<li><div class="dot ${t.mode}">${t.mode==="human"?"👤":i+1}</div><div><span class="tn">${esc(t.node)}</span><span class="tag ${t.mode==="llm"?"llm":t.mode==="human"?"human":"rules"}">${t.mode==="llm"?"LLM":t.mode==="human"?"human":"rules"}</span><div class="td">${esc(t.detail)}</div></div></li>`).join("")
    +(p?`<li><div class="dot pause">⏸</div><div><span class="tn">${p}</span><span class="tag human">waiting</span><div class="td">Paused for a human decision (LangGraph interrupt)</div></div></li>`:"")+`</ul></div>`;
   // risk + docs
-  if(s.risk_level){h+=`<div class="grid2"><div class="card"><h2>Fraud risk</h2><div class="risk"><div class="score">${s.risk_score}</div><div><span class="lvl ${s.risk_level}">${s.risk_level}</span><div class="td" style="margin-top:4px">${s.flags.length} flag(s) · ${s.trace.find(t=>t.node==='assess_risk')?.mode==='llm'?'rules + LLM review':'rule engine'}</div></div></div>`
-    +(s.flags.length?s.flags.map(f=>`<div class="flag ${f.severity}"><b>${f.severity}</b> · ${esc(f.message)}</div>`).join(""):`<div class="flag low">No red flags found.</div>`)+`</div>`;
+  if(s.risk_level){h+=`<div class="grid2"><div class="card"><h2>Fraud risk</h2><div class="risk"><div class="score">${s.risk_score}</div><div><span class="lvl ${s.risk_level}">${s.risk_level}</span><div class="td" style="margin-top:4px">${s.flags.length} flag(s) · ${s.trace.find(t=>t.node==='assess_risk')?.mode==='llm'?'rules + LLM review':'rule engine'}</div></div></div><div class="meter"><i style="left:${Math.min(s.risk_score,100)}%"></i></div><div class="td" style="font-size:11.5px">Human review at 30+, or for any medium/high flag</div>`
+    +(s.flags.length?[...s.flags].sort((x,y)=>({high:0,medium:1,low:2}[x.severity]-{high:0,medium:1,low:2}[y.severity])).map(f=>`<div class="flag ${f.severity}"><b>${f.severity}</b> · ${esc(f.message)}</div>`).join(""):`<div class="flag low">No red flags found.</div>`)+`</div>`;
    h+=`<div class="card"><h2>Document verification</h2>`+(s.missing_documents.length?s.missing_documents.map(d=>`<div class="chk"><span class="no">✕</span>Missing: ${esc(META.documents[d])}</div>`).join(""):`<div class="chk"><span class="ok">✓</span>All required documents uploaded</div>`)
     +(s.document_checks.length?`<h3>Estimate cross-checks</h3>`+s.document_checks.map(c=>`<div class="chk"><span class="${c.ok?"ok":"no"}">${c.ok?"✓":"✕"}</span><div><b>${esc(c.check)}</b><br><span class="td">${esc(c.detail)}</span></div></div>`).join(""):"")+`</div></div>`}
   // HITL panels
@@ -143,9 +154,20 @@ function render(){
   $("out").innerHTML=h;$("out").scrollIntoView({behavior:"smooth",block:"start"});
 }
 async function copyShare(btn){try{await navigator.clipboard.writeText($("shareUrl").value);btn.textContent="Copied ✓"}catch{$("shareUrl").select()}setTimeout(()=>btn.textContent="Copy",1500)}
-function chatHtml(m){return m.q?`<div class="m q">${esc(m.q)}</div>`:`<div class="m a">${esc(m.answer)}<small>${m.mode}${m.sources?.length?` · ${m.sources.length} source(s)`:""}</small></div>`}
+function chatHtml(m){if(m.q)return `<div class="m q">${esc(m.q)}</div>`;
+  const src=m.sources?.length?`<details><summary>${m.sources.length} source fact(s)</summary><ul>${m.sources.map(x=>`<li>${esc(x)}</li>`).join("")}</ul></details>`:"";
+  return `<div class="m a">${esc(m.answer)}<small>${m.mode==="guardrail"?"guardrail: no medical opinions":m.mode}</small>${src}</div>`}
 async function ask(q){q=q||$("q").value.trim();if(!q)return;CHAT.push({q});$("msgs").innerHTML=CHAT.map(chatHtml).join("");$("q").value="";
-  const a=await api("/api/donor/ask",{question:q,campaign_token:CUR.campaign_token});CHAT.push(a);const m=$("msgs");m.innerHTML=CHAT.map(chatHtml).join("");m.scrollTop=m.scrollHeight}
+  let a;try{a=await api("/api/donor/ask",{question:q,campaign_token:CUR.campaign_token})}catch(e){a={answer:"Sorry, that question couldn't be answered right now. Please try again.",mode:"error"}}CHAT.push(a);const m=$("msgs");m.innerHTML=CHAT.map(chatHtml).join("");m.scrollTop=m.scrollHeight}
+const EV_ROWS=[["task_success","Task success (end to end)","%"],["fraud_review_recall","Suspicious cases sent to a human","%"],["fraud_review_false_alarms","Genuine cases wrongly held",""],["red_flag_recall","Expected red flags raised","%"],["category_accuracy","Medical category correct","%"],["stories_passing_check","Stories passing every check","%"],["donor_answer_accuracy","Donor questions answered correctly","%"],["donor_says_not_found_correctly","Says “I don't know” when it should","%"],["medical_question_refusals","Medical questions refused","%"],["avg_ms_per_case","Time per case (ms)",""]];
+function renderEval(R){
+  const now=R.rules||R.llm, first=R.rules_v1_before_fixes, llm=R.llm;if(!now){$("eval").textContent="No evaluation report found.";return}
+  const cell=(r,k,u)=>r&&r.metrics[k]!=null?r.metrics[k]+u:"–";
+  let h=`<p class="note" style="margin-top:6px">${now.cases} hand-labelled campaigns (16 genuine, 16 a fraud analyst should see) and ${now.donor_questions} donor questions, labelled before the agent was run on them. Run <code>python scripts/eval.py</code> to reproduce.</p>
+   <table class="ev"><tr><th>Metric</th>${first?"<th>First run</th>":""}<th>Rules now</th>${llm?"<th>LLM</th>":""}</tr>`+EV_ROWS.map(([k,l,u])=>`<tr><td>${l}</td>${first?`<td>${cell(first,k,u)}</td>`:""}<td class="${first&&first.metrics[k]!==now.metrics[k]&&k!=="avg_ms_per_case"?"up":""}">${cell(now,k,u)}</td>${llm?`<td>${cell(llm,k,u)}</td>`:""}</tr>`).join("")+`</table>`;
+  if(now.holdout){const o=now.holdout;h+=`<p class="note"><b>Held-out check:</b> ${o.cases} more cases written after the fixes: task success ${o.first_run_task_success!=null?`${o.first_run_task_success}% on first run, `:""}${o.task_success}% now (after fixing the one bug they exposed), ${o.fraud_review_false_alarms} false alarm(s)${o.failed_cases.length?`. Still missed: ${o.failed_cases.map(f=>esc(f.note)).join("; ")}`:""}.</p>`}
+  h+=`<p class="note">The rules and the test set were written by the same person, so the rules column is optimistic; the held-out set and the LLM column are the independent checks.</p>`;
+  $("eval").innerHTML=h}
 init();
 </script>
 </body>
